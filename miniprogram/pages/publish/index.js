@@ -1,4 +1,13 @@
-const { call, passTypes, pets, roles, findLabel } = require("../../utils/api");
+const {
+  call,
+  passTypes,
+  pets,
+  roles,
+  findLabel,
+  getErrorMessage,
+  isLoggedIn,
+  loginWithWechatProfile,
+} = require("../../utils/api");
 
 Page({
   data: {
@@ -10,13 +19,49 @@ Page({
     petId: "petA",
     remark: "",
     submitting: false,
+    isLoggedIn: false,
+    loggingIn: false,
   },
 
   onShow() {
+    this.setData({ isLoggedIn: isLoggedIn() });
     const defaultRole = wx.getStorageSync("publishDefaultRole");
     if (defaultRole === "buyer" || defaultRole === "seller") {
       this.setData({ role: defaultRole });
       wx.removeStorageSync("publishDefaultRole");
+    }
+  },
+
+  onTabItemTap() {
+    if (!isLoggedIn()) {
+      this.handleLogin();
+    }
+  },
+
+  async handleLogin() {
+    if (this.data.loggingIn) return;
+    this.setData({ loggingIn: true });
+    try {
+      await loginWithWechatProfile();
+      this.setData({ isLoggedIn: true });
+      wx.showToast({ title: "登录成功" });
+    } catch (error) {
+      console.error("login failed", error);
+      const message = getErrorMessage(error, "登录失败");
+      if (/tap gesture|user TAP/i.test(message)) {
+        wx.showModal({
+          title: "请点击按钮登录",
+          content: "微信授权弹窗需要通过页面按钮触发，请点击页面里的“微信授权登录”。",
+          showCancel: false,
+        });
+      } else {
+        wx.showToast({
+          title: message.includes("auth deny") ? "已取消登录" : message,
+          icon: "none",
+        });
+      }
+    } finally {
+      this.setData({ loggingIn: false });
     }
   },
 
@@ -37,6 +82,13 @@ Page({
   },
 
   async submit() {
+    if (!this.data.isLoggedIn) {
+      wx.showToast({
+        title: "请先微信登录",
+        icon: "none",
+      });
+      return;
+    }
     if (this.data.submitting) return;
     this.setData({ submitting: true });
 

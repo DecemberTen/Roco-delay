@@ -44,6 +44,43 @@ const call = async (type, data = {}) => {
   return result.data;
 };
 
+const getLoginState = () => wx.getStorageSync("loginState") || null;
+
+const isLoggedIn = () => Boolean(getLoginState()?.openid);
+
+const login = async () => {
+  const data = await call("login");
+  wx.setStorageSync("loginState", {
+    openid: data.openid,
+    userId: data.user?._id || "",
+    loginAt: Date.now(),
+  });
+  const app = getApp();
+  if (app && app.globalData) {
+    app.globalData.openid = data.openid;
+    app.globalData.user = data.user;
+  }
+  return data;
+};
+
+const getErrorMessage = (error, fallback = "操作失败") =>
+  error?.message || error?.errMsg || error?.errmsg || fallback;
+
+const loginWithWechatProfile = async () => {
+  if (typeof wx.getUserProfile !== "function") {
+    throw new Error("当前微信版本不支持 wx.getUserProfile");
+  }
+  const profileResp = await new Promise((resolve, reject) => {
+    wx.getUserProfile({
+      desc: "用于传火匹配登录",
+      success: resolve,
+      fail: reject,
+    });
+  });
+  wx.setStorageSync("wechatProfile", profileResp.userInfo || {});
+  return login();
+};
+
 const findLabel = (options, value) => {
   const item = options.find((option) => option.value === value);
   return item ? item.label : value || "";
@@ -68,4 +105,9 @@ module.exports = {
   contactTypeMap,
   findLabel,
   formatPost,
+  getLoginState,
+  getErrorMessage,
+  isLoggedIn,
+  login,
+  loginWithWechatProfile,
 };

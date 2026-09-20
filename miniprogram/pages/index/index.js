@@ -1,4 +1,4 @@
-const { call, formatPost, passTypes, pets } = require("../../utils/api");
+const { call, formatPost, passTypes, pets, isLoggedIn } = require("../../utils/api");
 
 const allPassTypes = [{ label: "全部版本", value: "" }, ...passTypes];
 const allPets = [{ label: "全部精灵", value: "" }, ...pets];
@@ -35,13 +35,7 @@ Page({
   },
 
   async bootstrap() {
-    try {
-      await call("login");
-    } catch (error) {
-      console.error("bootstrap failed", error);
-    } finally {
-      this.loadHome();
-    }
+    this.loadHome();
   },
 
   async loadHome() {
@@ -49,14 +43,15 @@ Page({
     try {
       const selectedPassType = this.data.passTypes[this.data.latestPassTypeIndex].value;
       const selectedPet = this.data.pets[this.data.latestPetIndex].value;
+      const shouldLoadMine = isLoggedIn();
       const [home, latestPosts, activePosts, matchedGroups] = await Promise.all([
         call("getHomeSummary"),
         call("listLatestPosts", {
           passType: selectedPassType,
           petId: selectedPet,
         }),
-        call("listMyActivePosts").catch(() => []),
-        call("listMyMatchedPosts").catch(() => []),
+        shouldLoadMine ? call("listMyActivePosts").catch(() => []) : Promise.resolve([]),
+        shouldLoadMine ? call("listMyMatchedPosts").catch(() => []) : Promise.resolve([]),
       ]);
       const matchCountMap = (matchedGroups || []).reduce((acc, group) => {
         if (group.post && group.post._id) {

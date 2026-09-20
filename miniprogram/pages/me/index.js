@@ -1,4 +1,11 @@
-const { call, contactTypeMap, formatPost } = require("../../utils/api");
+const {
+  call,
+  contactTypeMap,
+  formatPost,
+  getErrorMessage,
+  isLoggedIn,
+  loginWithWechatProfile,
+} = require("../../utils/api");
 
 Page({
   data: {
@@ -16,21 +23,68 @@ Page({
     posts: [],
     saving: false,
     loading: false,
+    loggingIn: false,
+    isLoggedIn: false,
     isEditingProfile: false,
   },
 
   onLoad() {
-    this.loadPage();
+    this.initPage();
   },
 
   onShow() {
-    this.loadMyPosts();
+    const loggedIn = isLoggedIn();
+    this.setData({ isLoggedIn: loggedIn });
+    if (loggedIn) {
+      this.loadMyPosts();
+    }
+  },
+
+  onTabItemTap() {
+    if (!isLoggedIn()) {
+      this.handleLogin();
+    }
+  },
+
+  initPage() {
+    const loggedIn = isLoggedIn();
+    this.setData({ isLoggedIn: loggedIn });
+    if (loggedIn) {
+      this.loadPage();
+    }
+  },
+
+  async handleLogin() {
+    if (this.data.loggingIn) return;
+    this.setData({ loggingIn: true });
+    try {
+      await loginWithWechatProfile();
+      this.setData({ isLoggedIn: true });
+      await this.loadPage();
+      wx.showToast({ title: "登录成功" });
+    } catch (error) {
+      console.error("login failed", error);
+      const message = getErrorMessage(error, "登录失败");
+      if (/tap gesture|user TAP/i.test(message)) {
+        wx.showModal({
+          title: "请点击按钮登录",
+          content: "微信授权弹窗需要通过页面按钮触发，请点击页面里的“微信授权登录”。",
+          showCancel: false,
+        });
+      } else {
+        wx.showToast({
+          title: message.includes("auth deny") ? "已取消登录" : message,
+          icon: "none",
+        });
+      }
+    } finally {
+      this.setData({ loggingIn: false });
+    }
   },
 
   async loadPage() {
     this.setData({ loading: true });
     try {
-      await call("login");
       const profile = await call("getProfile");
       this.applyProfile(profile);
       await this.loadMyPosts();

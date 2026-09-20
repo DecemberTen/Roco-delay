@@ -4,6 +4,13 @@
     <view class="subtitle">微信身份用于识别发布人，洛克王国 UID 和联系方式用于传火匹配后的私下沟通。</view>
   </view>
 
+  <view wx:if="{{!isLoggedIn}}" class="card login-card">
+    <view class="login-title">需要微信登录</view>
+    <view class="login-desc">登录后可以绑定洛克王国 UID、管理自己的发布，并查看进行中的传火/接火单。</view>
+    <button class="login-btn" loading="{{loggingIn}}" bindtap="handleLogin">微信授权登录</button>
+  </view>
+
+  <block wx:else>
   <view class="card">
     <view wx:if="{{!isEditingProfile}}" class="profile-view">
       <view class="profile-top">
@@ -127,4 +134,5 @@
       </view>
     </view>
   </view>
+  </block>
 </view>

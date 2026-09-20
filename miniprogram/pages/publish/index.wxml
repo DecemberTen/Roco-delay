@@ -4,6 +4,13 @@
     <view class="subtitle">选择你的身份、版本和通行证精灵，系统会按相同条件匹配对方。</view>
   </view>
 
+  <view wx:if="{{!isLoggedIn}}" class="card login-card">
+    <view class="login-title">需要微信登录</view>
+    <view class="login-desc">登录后才能发布接火或传火信息，系统会用微信身份识别你的发布记录。</view>
+    <button class="login-btn" loading="{{loggingIn}}" bindtap="handleLogin">微信授权登录</button>
+  </view>
+
+  <block wx:else>
   <view class="card">
     <view class="label">发布身份</view>
     <view class="chips">
@@ -59,4 +66,5 @@
   </view>
 
   <button class="submit" loading="{{submitting}}" bindtap="submit">确认发布</button>
+  </block>
 </view>
