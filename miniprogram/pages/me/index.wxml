@@ -1,0 +1,130 @@
+<view class="page">
+  <view class="header">
+    <view class="title">我的资料</view>
+    <view class="subtitle">微信身份用于识别发布人，洛克王国 UID 和联系方式用于传火匹配后的私下沟通。</view>
+  </view>
+
+  <view class="card">
+    <view wx:if="{{!isEditingProfile}}" class="profile-view">
+      <view class="profile-top">
+        <view>
+          <view class="section-title">账号资料</view>
+          <view class="hint">{{profile && profile.rocoUid ? '已绑定洛克王国信息' : '发布前需要先绑定资料'}}</view>
+        </view>
+        <button class="edit-btn" bindtap="editProfile">{{profile && profile.rocoUid ? '编辑资料' : '去绑定'}}</button>
+      </view>
+
+      <view wx:if="{{profile && profile.rocoUid}}" class="profile-info">
+        <view class="info-row">
+          <text class="info-key">洛克 UID</text>
+          <text class="info-value">{{profile.rocoUid}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-key">洛克昵称</text>
+          <text class="info-value">{{profile.rocoName || '未填写'}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-key">联系方式</text>
+          <text class="info-value">{{profile.contactTypeLabel}} · {{profile.contactValue}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="profile-edit">
+      <view class="label">洛克王国 UID</view>
+      <input
+        class="input"
+        value="{{rocoUid}}"
+        placeholder="请输入你的洛克王国 UID"
+        data-field="rocoUid"
+        bindinput="onInput"
+      />
+
+      <view class="label gap">洛克王国昵称</view>
+      <input
+        class="input"
+        value="{{rocoName}}"
+        placeholder="可选，方便对方识别"
+        data-field="rocoName"
+        bindinput="onInput"
+      />
+
+      <view class="label gap">联系方式</view>
+      <view class="chips">
+        <view
+          wx:for="{{contactTypes}}"
+          wx:key="value"
+          class="chip {{contactType === item.value ? 'active' : ''}}"
+          data-value="{{item.value}}"
+          bindtap="onContactTypeChange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+      <input
+        class="input"
+        value="{{contactValue}}"
+        placeholder="请输入联系方式，匹配详情页会展示"
+        data-field="contactValue"
+        bindinput="onInput"
+      />
+
+      <view class="edit-actions">
+        <button class="cancel" bindtap="cancelEditProfile">取消</button>
+        <button class="save" loading="{{saving}}" bindtap="saveProfile">保存资料</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="list-head">
+    <view>
+      <view class="section-title">我的发布</view>
+      <view class="hint">你可以更新自己的发布状态</view>
+    </view>
+  </view>
+
+  <view wx:if="{{posts.length === 0}}" class="empty">还没有发布记录</view>
+
+  <view wx:else class="post-list">
+    <view wx:for="{{posts}}" wx:key="_id" class="post-card">
+      <view class="post-main" data-id="{{item._id}}" bindtap="goDetail">
+        <view class="post-top">
+          <view class="badge">{{item.roleLabel}}</view>
+          <view class="status">{{item.statusLabel}}</view>
+        </view>
+        <view class="post-title">{{item.passTypeLabel}} · {{item.petLabel}}</view>
+        <view wx:if="{{item.remark}}" class="remark">{{item.remark}}</view>
+      </view>
+
+      <view class="actions">
+        <button
+          wx:if="{{item.status !== 'open'}}"
+          class="action"
+          data-id="{{item._id}}"
+          data-status="open"
+          bindtap="updateStatus"
+        >
+          重新开放
+        </button>
+        <button
+          wx:if="{{item.status === 'open' || item.status === 'contacted'}}"
+          class="action"
+          data-id="{{item._id}}"
+          data-status="completed"
+          bindtap="updateStatus"
+        >
+          已完成
+        </button>
+        <button
+          wx:if="{{item.status === 'open' || item.status === 'contacted'}}"
+          class="action danger"
+          data-id="{{item._id}}"
+          data-status="closed"
+          bindtap="updateStatus"
+        >
+          关闭
+        </button>
+      </view>
+    </view>
+  </view>
+</view>

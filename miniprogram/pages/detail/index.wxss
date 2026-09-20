@@ -1,0 +1,117 @@
+page {
+  background: #f7f3ea;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 32rpx 28rpx 80rpx;
+  box-sizing: border-box;
+}
+
+.card,
+.empty,
+.notice {
+  margin-top: 24rpx;
+  padding: 30rpx;
+  border-radius: 28rpx;
+  background: #fffdf8;
+  box-shadow: 0 12rpx 32rpx rgba(104, 73, 42, 0.08);
+}
+
+.hero {
+  background: linear-gradient(135deg, #fff4d8 0%, #ffd7b1 100%);
+}
+
+.badge {
+  display: inline-flex;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(177, 92, 45, 0.12);
+  color: #b15c2d;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.title {
+  margin-top: 22rpx;
+  font-size: 42rpx;
+  font-weight: 700;
+  color: #3a2417;
+}
+
+.status {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: #76553f;
+}
+
+.section-title {
+  margin-bottom: 16rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #3a2417;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-top: 1rpx solid #f0e6d8;
+}
+
+.key {
+  color: #9c8a78;
+  font-size: 26rpx;
+}
+
+.value {
+  color: #3a2417;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.contact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.contact-type {
+  font-size: 24rpx;
+  color: #9c8a78;
+}
+
+.contact-value {
+  margin-top: 8rpx;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #3a2417;
+}
+
+.copy {
+  margin: 0;
+  width: 132rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 999rpx;
+  color: #fff;
+  background: #b15c2d;
+  font-size: 26rpx;
+}
+
+.remark,
+.notice,
+.empty {
+  color: #7d6752;
+  font-size: 26rpx;
+  line-height: 1.65;
+}
+
+.notice {
+  background: #fff6e8;
+  color: #8a5a32;
+}
+
+.empty {
+  text-align: center;
+}

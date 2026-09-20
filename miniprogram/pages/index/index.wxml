@@ -1,29 +1,105 @@
-<!--index.wxml-->
-<view class="container">
-  <view class="title">快速了解云开发</view>
-  <view class="top_tip">免鉴权接口调用 免部署后台 高并发</view>
-  <view class="power" wx:key="title" wx:for="{{powerList}}" wx:for-item="power">
-    <view class="power_info" data-index="{{index}}" data-type="{{ power.type }}" bindtap="onClickPowerInfo">
-      <view class="power_info_text">
-        <view class="power_info_text_title">
-          {{power.title}}
-          <view class="power_info_text_tag" wx:if="{{power.tag}}">{{power.tag}}</view>
+<view class="page">
+  <view class="hero">
+    <view class="eyebrow">Roco-delay</view>
+    <view class="title">洛克王国通行证传火匹配</view>
+    <view class="subtitle">平台只做信息匹配，不参与现金交易。你未完成的传火/接火单会展示在首页顶部。</view>
+  </view>
+
+  <view class="card match-card">
+    <view class="section-title">进行中的匹配单</view>
+    <view class="hint">展示你还没有完成或关闭的传火/接火信息，点击可进入详情。</view>
+
+    <view wx:if="{{activePosts.length > 0}}">
+      <view
+        wx:for="{{activePosts}}"
+        wx:key="_id"
+        class="active-order"
+        data-id="{{item._id}}"
+        bindtap="goDetail"
+      >
+        <view>
+          <view class="active-top">
+            <view class="badge">{{item.role === 'buyer' ? '接火中' : '传火中'}}</view>
+            <view wx:if="{{item.matchCount > 0}}" class="match-count">已有 {{item.matchCount}} 个匹配</view>
+            <view wx:else class="match-count muted">等待匹配</view>
+          </view>
+          <view class="active-title">{{item.passTypeLabel}} · {{item.petLabel}}</view>
+          <view class="active-meta">{{item.statusLabel}} · 洛克 UID：{{item.rocoUid}}</view>
         </view>
-        <view class="power_info_text_tip">{{power.tip}}</view>
+        <view class="arrow">详情</view>
       </view>
-      <image wx:if="{{!power.showItem && power.item.length}}" class="power_info_more" src="../../images/arrow.svg"></image>
-      <image wx:if="{{power.showItem && power.item.length}}" class="power_info_less" src="../../images/arrow.svg"></image>
-      <image wx:if="{{!power.item.length}}" class="power_item_icon" src="../../images/arrow.svg"></image>
     </view>
-    <view wx:if="{{power.showItem}}">
-      <view wx:key="title" wx:for="{{power.item}}">
-        <view class="line"></view>
-        <view class="power_item" bindtap="jumpPage" data-type="{{ item.type }}" data-page="{{item.page}}">
-          <view class="power_item_title">{{item.title}}</view>
-          <image class="power_item_icon" src="../../images/arrow.svg"></image>
-        </view>
-      </view>
+    <view wx:else class="empty-inline">
+      暂无进行中的传火/接火单。可以从底部“发布”Tab 创建新的匹配单。
     </view>
   </view>
-  <cloud-tip-modal showTipProps="{{showTip}}" title="{{title}}" content="{{content}}"></cloud-tip-modal>
+
+  <view class="summary-grid">
+    <view class="summary-card summary-wide">
+      <view class="summary-num">{{summary.completed}}</view>
+      <view class="summary-label">累积完成</view>
+    </view>
+    <view class="summary-card">
+      <view class="summary-num">{{summary.buyers}}</view>
+      <view class="summary-label">待接火</view>
+    </view>
+    <view class="summary-card">
+      <view class="summary-num">{{summary.sellers}}</view>
+      <view class="summary-label">可传火</view>
+    </view>
+  </view>
+
+  <view class="list-head">
+    <view>
+      <view class="section-title">最新发布</view>
+      <view class="hint">最近的待匹配信息，点击查看联系方式</view>
+    </view>
+  </view>
+
+  <view class="filters">
+    <picker
+      mode="selector"
+      range="{{passTypes}}"
+      range-key="label"
+      value="{{latestPassTypeIndex}}"
+      bindchange="onLatestPassTypeChange"
+    >
+      <view class="filter-pill">{{latestPassTypeLabel}}</view>
+    </picker>
+    <picker
+      mode="selector"
+      range="{{pets}}"
+      range-key="label"
+      value="{{latestPetIndex}}"
+      bindchange="onLatestPetChange"
+    >
+      <view class="filter-pill">{{latestPetLabel}}</view>
+    </picker>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty">正在加载首页数据...</view>
+
+  <view wx:elif="{{latestPosts.length === 0}}" class="empty">
+    <view class="empty-title">暂无符合条件的发布</view>
+    <view class="empty-desc">可以调整筛选条件，或从底部“发布”Tab 创建新的接火/传火信息。</view>
+  </view>
+
+  <view wx:else class="post-list">
+    <view
+      wx:for="{{latestPosts}}"
+      wx:key="_id"
+      class="post-card"
+      data-id="{{item._id}}"
+      bindtap="goDetail"
+    >
+      <view class="post-top">
+        <view class="badge">{{item.roleLabel}}</view>
+        <view class="status">{{item.statusLabel}}</view>
+      </view>
+      <view class="post-title">{{item.passTypeLabel}} · {{item.petLabel}}</view>
+      <view class="post-meta">洛克 UID：{{item.rocoUid}}</view>
+      <view wx:if="{{item.rocoName}}" class="post-meta">昵称：{{item.rocoName}}</view>
+      <view wx:if="{{item.remark}}" class="remark">{{item.remark}}</view>
+    </view>
+  </view>
 </view>

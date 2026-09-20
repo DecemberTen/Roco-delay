@@ -1,185 +1,453 @@
 const cloud = require("wx-server-sdk");
+
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV,
 });
 
 const db = cloud.database();
-// 获取openid
-const getOpenId = async () => {
-  // 获取基础信息
+const _ = db.command;
+
+const COLLECTIONS = ["users", "posts"];
+const PASS_TYPES = ["basic", "premium"];
+const PET_IDS = ["petA", "petB"];
+const ROLES = ["buyer", "seller"];
+const POST_STATUS = ["open", "contacted", "completed", "closed"];
+
+const ok = (data = {}) => ({
+  success: true,
+  data,
+});
+
+const fail = (message, code = "BAD_REQUEST") => ({
+  success: false,
+  code,
+  message,
+});
+
+const now = () => db.serverDate();
+
+const getWxContext = () => {
   const wxContext = cloud.getWXContext();
-  return {
+  if (!wxContext.OPENID) {
+    throw new Error("OPENID_NOT_FOUND");
+  }
+  return wxContext;
+};
+
+const ensureCollections = async () => {
+  await Promise.all(
+    COLLECTIONS.map(async (name) => {
+      try {
+        await db.createCollection(name);
+      } catch (error) {
+        // 集合已存在时会抛错，这里忽略即可。
+      }
+    })
+  );
+};
+
+const getOpenId = async () => {
+  const wxContext = getWxContext();
+  return ok({
     openid: wxContext.OPENID,
     appid: wxContext.APPID,
     unionid: wxContext.UNIONID,
+  });
+};
+
+const login = async () => {
+  const wxContext = getWxContext();
+  const openid = wxContext.OPENID;
+  const users = db.collection("users");
+  const userResp = await users.where({ _openid: openid }).limit(1).get();
+
+  if (!userResp.data.length) {
+    const addResp = await users.add({
+      data: {
+        _openid: openid,
+        rocoUid: "",
+        rocoName: "",
+        contactType: "",
+        contactValue: "",
+        role: "user",
+        createdAt: now(),
+        updatedAt: now(),
+        lastLoginAt: now(),
+      },
+    });
+    return ok({
+      openid,
+      user: {
+        _id: addResp._id,
+        _openid: openid,
+        rocoUid: "",
+        rocoName: "",
+        contactType: "",
+        contactValue: "",
+        role: "user",
+      },
+    });
+  }
+
+  const user = userResp.data[0];
+  await users.doc(user._id).update({
+    data: {
+      lastLoginAt: now(),
+      updatedAt: now(),
+    },
+  });
+  return ok({
+    openid,
+    user,
+  });
+};
+
+const getProfile = async () => {
+  const { OPENID } = getWxContext();
+  const resp = await db.collection("users").where({ _openid: OPENID }).limit(1).get();
+  return ok(resp.data[0] || null);
+};
+
+const saveUserProfile = async (event) => {
+  const { OPENID } = getWxContext();
+  const data = event.data || {};
+  const rocoUid = String(data.rocoUid || "").trim();
+  const rocoName = String(data.rocoName || "").trim();
+  const contactType = String(data.contactType || "").trim();
+  const contactValue = String(data.contactValue || "").trim();
+
+  if (!rocoUid) return fail("请填写洛克王国 UID");
+  if (!contactType) return fail("请选择联系方式类型");
+  if (!contactValue) return fail("请填写联系方式");
+
+  const users = db.collection("users");
+  const payload = {
+    rocoUid,
+    rocoName,
+    contactType,
+    contactValue,
+    updatedAt: now(),
   };
-};
+  const userResp = await users.where({ _openid: OPENID }).limit(1).get();
 
-// 获取小程序二维码
-const getMiniProgramCode = async () => {
-  // 获取小程序二维码的buffer
-  const resp = await cloud.openapi.wxacode.get({
-    path: "pages/index/index",
+  if (!userResp.data.length) {
+    const addResp = await users.add({
+      data: {
+        _openid: OPENID,
+        ...payload,
+        role: "user",
+        createdAt: now(),
+        lastLoginAt: now(),
+      },
+    });
+    return ok({
+      _id: addResp._id,
+      _openid: OPENID,
+      ...payload,
+    });
+  }
+
+  const user = userResp.data[0];
+  await users.doc(user._id).update({ data: payload });
+  return ok({
+    ...user,
+    ...payload,
   });
-  const { buffer } = resp;
-  // 将图片上传云存储空间
-  const upload = await cloud.uploadFile({
-    cloudPath: "code.png",
-    fileContent: buffer,
+};
+
+const assertProfileReady = async (openid) => {
+  const resp = await db.collection("users").where({ _openid: openid }).limit(1).get();
+  const user = resp.data[0];
+  if (!user || !user.rocoUid || !user.contactType || !user.contactValue) {
+    return null;
+  }
+  return user;
+};
+
+const createPost = async (event) => {
+  const { OPENID } = getWxContext();
+  const user = await assertProfileReady(OPENID);
+  if (!user) return fail("请先绑定洛克王国 UID 和联系方式", "PROFILE_REQUIRED");
+
+  const data = event.data || {};
+  const role = String(data.role || "").trim();
+  const passType = String(data.passType || "").trim();
+  const petId = String(data.petId || "").trim();
+  const petName = String(data.petName || "").trim();
+  const remark = String(data.remark || "").trim();
+
+  if (!ROLES.includes(role)) return fail("请选择发布身份");
+  if (!PASS_TYPES.includes(passType)) return fail("请选择通行证版本");
+  if (!PET_IDS.includes(petId)) return fail("请选择通行证精灵");
+
+  const addResp = await db.collection("posts").add({
+    data: {
+      _openid: OPENID,
+      role,
+      passType,
+      petId,
+      petName,
+      remark,
+      status: "open",
+      rocoUid: user.rocoUid,
+      rocoName: user.rocoName || "",
+      contactType: user.contactType,
+      contactValue: user.contactValue,
+      createdAt: now(),
+      updatedAt: now(),
+    },
   });
-  return upload.fileID;
+
+  return ok({
+    _id: addResp._id,
+  });
 };
 
-// 创建集合
-const createCollection = async () => {
-  try {
-    // 创建集合
-    await db.createCollection("sales");
-    await db.collection("sales").add({
-      // data 字段表示需新增的 JSON 数据
-      data: {
-        region: "华东",
-        city: "上海",
-        sales: 11,
-      },
-    });
-    await db.collection("sales").add({
-      // data 字段表示需新增的 JSON 数据
-      data: {
-        region: "华东",
-        city: "南京",
-        sales: 11,
-      },
-    });
-    await db.collection("sales").add({
-      // data 字段表示需新增的 JSON 数据
-      data: {
-        region: "华南",
-        city: "广州",
-        sales: 22,
-      },
-    });
-    await db.collection("sales").add({
-      // data 字段表示需新增的 JSON 数据
-      data: {
-        region: "华南",
-        city: "深圳",
-        sales: 22,
-      },
-    });
-    return {
-      success: true,
-    };
-  } catch (e) {
-    // 这里catch到的是该collection已经存在，从业务逻辑上来说是运行成功的，所以catch返回success给前端，避免工具在前端抛出异常
-    return {
-      success: true,
-      data: "create collection success",
-    };
+const buildPostQuery = (filters = {}) => {
+  const query = {};
+  if (filters.role && ROLES.includes(filters.role)) query.role = filters.role;
+  if (filters.passType && PASS_TYPES.includes(filters.passType)) query.passType = filters.passType;
+  if (filters.petId && PET_IDS.includes(filters.petId)) query.petId = filters.petId;
+  if (filters.status && POST_STATUS.includes(filters.status)) {
+    query.status = filters.status;
+  } else {
+    query.status = "open";
   }
+  return query;
 };
 
-// 查询数据
-const selectRecord = async () => {
-  // 返回数据库查询结果
-  return await db.collection("sales").get();
+const listMatches = async (event) => {
+  const data = event.data || {};
+  const role = data.requesterRole === "seller" ? "buyer" : "seller";
+  const query = buildPostQuery({
+    role,
+    passType: data.passType,
+    petId: data.petId,
+    status: "open",
+  });
+
+  const resp = await db
+    .collection("posts")
+    .where(query)
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
+  return ok(resp.data);
 };
 
-// 更新数据
-const updateRecord = async (event) => {
-  try {
-    // 遍历修改数据库信息
-    for (let i = 0; i < event.data.length; i++) {
-      await db
-        .collection("sales")
-        .where({
-          _id: event.data[i]._id,
-        })
-        .update({
-          data: {
-            sales: event.data[i].sales,
-          },
-        });
-    }
-    return {
-      success: true,
-      data: event.data,
-    };
-  } catch (e) {
-    return {
-      success: false,
-      errMsg: e,
-    };
-  }
+const listPosts = async (event) => {
+  const data = event.data || {};
+  const query = buildPostQuery(data);
+  const resp = await db
+    .collection("posts")
+    .where(query)
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
+  return ok(resp.data);
 };
 
-// 新增数据
-const insertRecord = async (event) => {
-  try {
-    const insertRecord = event.data;
-    // 插入数据
-    await db.collection("sales").add({
-      data: {
-        region: insertRecord.region,
-        city: insertRecord.city,
-        sales: Number(insertRecord.sales),
-      },
-    });
-    return {
-      success: true,
-      data: event.data,
-    };
-  } catch (e) {
-    return {
-      success: false,
-      errMsg: e,
-    };
-  }
-};
-
-// 删除数据
-const deleteRecord = async (event) => {
-  try {
-    await db
-      .collection("sales")
+const getHomeSummary = async () => {
+  const [openResp, completedResp] = await Promise.all([
+    db
+      .collection("posts")
       .where({
-        _id: event.data._id,
+        status: "open",
       })
-      .remove();
-    return {
-      success: true,
-    };
-  } catch (e) {
-    return {
-      success: false,
-      errMsg: e,
-    };
-  }
+      .orderBy("createdAt", "desc")
+      .limit(100)
+      .get(),
+    db
+      .collection("posts")
+      .where({
+        status: "completed",
+      })
+      .count(),
+  ]);
+  const posts = openResp.data || [];
+
+  const summary = posts.reduce(
+    (acc, post) => {
+      if (post.role === "buyer") acc.buyers += 1;
+      if (post.role === "seller") acc.sellers += 1;
+      return acc;
+    },
+    {
+      buyers: 0,
+      sellers: 0,
+      completed: completedResp.total || 0,
+      total: posts.length,
+    }
+  );
+
+  return ok({
+    summary,
+  });
 };
 
-// const getOpenId = require('./getOpenId/index');
-// const getMiniProgramCode = require('./getMiniProgramCode/index');
-// const createCollection = require('./createCollection/index');
-// const selectRecord = require('./selectRecord/index');
-// const updateRecord = require('./updateRecord/index');
-// const fetchGoodsList = require('./fetchGoodsList/index');
-// const genMpQrcode = require('./genMpQrcode/index');
-// 云函数入口函数
-exports.main = async (event, context) => {
-  switch (event.type) {
-    case "getOpenId":
-      return await getOpenId();
-    case "getMiniProgramCode":
-      return await getMiniProgramCode();
-    case "createCollection":
-      return await createCollection();
-    case "selectRecord":
-      return await selectRecord();
-    case "updateRecord":
-      return await updateRecord(event);
-    case "insertRecord":
-      return await insertRecord(event);
-    case "deleteRecord":
-      return await deleteRecord(event);
+const listLatestPosts = async (event) => {
+  const data = event.data || {};
+  const query = buildPostQuery({
+    passType: data.passType,
+    petId: data.petId,
+    status: "open",
+  });
+  const resp = await db
+    .collection("posts")
+    .where(query)
+    .orderBy("createdAt", "desc")
+    .limit(20)
+    .get();
+
+  return ok(resp.data || []);
+};
+
+const listMyMatchedPosts = async () => {
+  const { OPENID } = getWxContext();
+  const myResp = await db
+    .collection("posts")
+    .where({
+      _openid: OPENID,
+      status: "open",
+    })
+    .orderBy("createdAt", "desc")
+    .limit(20)
+    .get();
+  const myPosts = myResp.data || [];
+
+  const groups = await Promise.all(
+    myPosts.map(async (post) => {
+      const oppositeRole = post.role === "buyer" ? "seller" : "buyer";
+      const matchResp = await db
+        .collection("posts")
+        .where({
+          role: oppositeRole,
+          status: "open",
+          passType: post.passType,
+          petId: post.petId,
+          _openid: _.neq(OPENID),
+        })
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get();
+
+      return {
+        post,
+        matchCount: matchResp.data.length,
+        matches: matchResp.data,
+      };
+    })
+  );
+
+  return ok(groups.filter((group) => group.matchCount > 0));
+};
+
+const listMyActivePosts = async () => {
+  const { OPENID } = getWxContext();
+  const resp = await db
+    .collection("posts")
+    .where({
+      _openid: OPENID,
+      status: _.in(["open", "contacted"]),
+    })
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .get();
+  return ok(resp.data || []);
+};
+
+const listMyPosts = async () => {
+  const { OPENID } = getWxContext();
+  const resp = await db
+    .collection("posts")
+    .where({
+      _openid: OPENID,
+    })
+    .orderBy("createdAt", "desc")
+    .limit(100)
+    .get();
+  return ok(resp.data);
+};
+
+const getPostDetail = async (event) => {
+  const id = String((event.data && event.data.id) || "").trim();
+  if (!id) return fail("缺少发布 ID");
+
+  const resp = await db.collection("posts").doc(id).get();
+  return ok(resp.data);
+};
+
+const updatePostStatus = async (event) => {
+  const { OPENID } = getWxContext();
+  const data = event.data || {};
+  const id = String(data.id || "").trim();
+  const status = String(data.status || "").trim();
+
+  if (!id) return fail("缺少发布 ID");
+  if (!POST_STATUS.includes(status)) return fail("状态不正确");
+
+  const postResp = await db.collection("posts").doc(id).get();
+  const post = postResp.data;
+  if (!post || post._openid !== OPENID) {
+    return fail("只能修改自己的发布", "FORBIDDEN");
+  }
+
+  await db.collection("posts").doc(id).update({
+    data: {
+      status,
+      updatedAt: now(),
+    },
+  });
+  return ok({
+    id,
+    status,
+  });
+};
+
+const createCollection = async () => {
+  await ensureCollections();
+  return ok({
+    collections: COLLECTIONS,
+  });
+};
+
+exports.main = async (event) => {
+  try {
+    switch (event.type) {
+      case "getOpenId":
+        return await getOpenId();
+      case "login":
+        return await login();
+      case "getProfile":
+        return await getProfile();
+      case "saveUserProfile":
+        return await saveUserProfile(event);
+      case "createPost":
+        return await createPost(event);
+      case "listMatches":
+        return await listMatches(event);
+      case "listPosts":
+        return await listPosts(event);
+      case "getHomeSummary":
+        return await getHomeSummary();
+      case "listLatestPosts":
+        return await listLatestPosts(event);
+      case "listMyMatchedPosts":
+        return await listMyMatchedPosts();
+      case "listMyActivePosts":
+        return await listMyActivePosts();
+      case "listMyPosts":
+        return await listMyPosts();
+      case "getPostDetail":
+        return await getPostDetail(event);
+      case "updatePostStatus":
+        return await updatePostStatus(event);
+      case "createCollection":
+        return await createCollection();
+      default:
+        return fail("未知操作类型");
+    }
+  } catch (error) {
+    return fail(error.message || "服务异常", "SERVER_ERROR");
   }
 };

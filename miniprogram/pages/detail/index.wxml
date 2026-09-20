@@ -1,0 +1,45 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="empty">正在加载...</view>
+
+  <view wx:elif="{{post}}" class="content">
+    <view class="card hero">
+      <view class="badge">{{post.roleLabel}}</view>
+      <view class="title">{{post.passTypeLabel}} · {{post.petLabel}}</view>
+      <view class="status">{{post.statusLabel}}</view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">玩家信息</view>
+      <view class="row">
+        <text class="key">洛克 UID</text>
+        <text class="value">{{post.rocoUid}}</text>
+      </view>
+      <view wx:if="{{post.rocoName}}" class="row">
+        <text class="key">洛克昵称</text>
+        <text class="value">{{post.rocoName}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">联系方式</view>
+      <view class="contact">
+        <view>
+          <view class="contact-type">{{post.contactTypeLabel}}</view>
+          <view class="contact-value">{{post.contactValue}}</view>
+        </view>
+        <button class="copy" bindtap="copyContact">复制</button>
+      </view>
+    </view>
+
+    <view wx:if="{{post.remark}}" class="card">
+      <view class="section-title">备注</view>
+      <view class="remark">{{post.remark}}</view>
+    </view>
+
+    <view class="notice">
+      本小程序仅提供传火信息匹配，不参与现金交易、不担保结果。请双方自行核对版本、精灵、UID 与风险。
+    </view>
+  </view>
+
+  <view wx:else class="empty">没有找到这条发布</view>
+</view>

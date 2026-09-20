@@ -1,0 +1,62 @@
+<view class="page">
+  <view class="header">
+    <view class="title">发布传火信息</view>
+    <view class="subtitle">选择你的身份、版本和通行证精灵，系统会按相同条件匹配对方。</view>
+  </view>
+
+  <view class="card">
+    <view class="label">发布身份</view>
+    <view class="chips">
+      <view
+        wx:for="{{roles}}"
+        wx:key="value"
+        class="chip {{role === item.value ? 'active' : ''}}"
+        data-value="{{item.value}}"
+        bindtap="onRoleChange"
+      >
+        {{item.label}}
+      </view>
+    </view>
+
+    <view class="label gap">通行证版本</view>
+    <view class="chips">
+      <view
+        wx:for="{{passTypes}}"
+        wx:key="value"
+        class="chip {{passType === item.value ? 'active' : ''}}"
+        data-value="{{item.value}}"
+        bindtap="onPassTypeChange"
+      >
+        {{item.label}}
+      </view>
+    </view>
+
+    <view class="label gap">通行证精灵</view>
+    <view class="chips">
+      <view
+        wx:for="{{pets}}"
+        wx:key="value"
+        class="chip {{petId === item.value ? 'active' : ''}}"
+        data-value="{{item.value}}"
+        bindtap="onPetChange"
+      >
+        {{item.label}}
+      </view>
+    </view>
+
+    <view class="label gap">备注</view>
+    <textarea
+      class="textarea"
+      value="{{remark}}"
+      maxlength="120"
+      placeholder="例如：晚上在线、希望尽快联系、可接受的沟通方式等"
+      bindinput="onRemarkInput"
+    />
+  </view>
+
+  <view class="notice">
+    平台只提供信息匹配，不参与现金交易。请双方自行确认身份、版本和精灵信息。
+  </view>
+
+  <button class="submit" loading="{{submitting}}" bindtap="submit">确认发布</button>
+</view>
