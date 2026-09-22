@@ -105,31 +105,34 @@
 
       <view class="actions">
         <button
-          wx:if="{{item.status !== 'open'}}"
-          class="action"
-          data-id="{{item._id}}"
-          data-status="open"
-          bindtap="updateStatus"
-        >
-          重新开放
-        </button>
-        <button
-          wx:if="{{item.status === 'open' || item.status === 'contacted'}}"
-          class="action"
-          data-id="{{item._id}}"
-          data-status="completed"
-          bindtap="updateStatus"
-        >
-          已完成
-        </button>
-        <button
-          wx:if="{{item.status === 'open' || item.status === 'contacted'}}"
+          wx:if="{{item.status === 'matching'}}"
           class="action danger"
           data-id="{{item._id}}"
           data-status="closed"
+          data-currentstatus="{{item.status}}"
           bindtap="updateStatus"
         >
-          关闭
+          取消发布
+        </button>
+        <button
+          wx:if="{{item.status === 'matched'}}"
+          class="action"
+          data-id="{{item._id}}"
+          data-status="completed"
+          data-currentstatus="{{item.status}}"
+          bindtap="updateStatus"
+        >
+          标记完成
+        </button>
+        <button
+          wx:if="{{item.status === 'matched'}}"
+          class="action danger"
+          data-id="{{item._id}}"
+          data-status="closed"
+          data-currentstatus="{{item.status}}"
+          bindtap="updateStatus"
+        >
+          关闭匹配
         </button>
       </view>
     </view>

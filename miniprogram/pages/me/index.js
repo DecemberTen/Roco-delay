@@ -40,12 +40,6 @@ Page({
     }
   },
 
-  onTabItemTap() {
-    if (!isLoggedIn()) {
-      this.handleLogin();
-    }
-  },
-
   initPage() {
     const loggedIn = isLoggedIn();
     this.setData({ isLoggedIn: loggedIn });
@@ -175,11 +169,14 @@ Page({
   },
 
   async updateStatus(e) {
-    const { id, status } = e.currentTarget.dataset;
-    const label = status === "completed" ? "标记完成" : status === "closed" ? "关闭" : "重新开放";
+    const { id, status, currentstatus } = e.currentTarget.dataset;
+    let label = "更新状态";
+    if (status === "completed") label = "标记完成";
+    if (status === "closed" && currentstatus === "matching") label = "取消发布";
+    if (status === "closed" && currentstatus === "matched") label = "关闭匹配";
     wx.showModal({
       title: label,
-      content: `确认${label}这条发布吗？`,
+      content: `确认${label}吗？`,
       success: async (res) => {
         if (!res.confirm) return;
         try {

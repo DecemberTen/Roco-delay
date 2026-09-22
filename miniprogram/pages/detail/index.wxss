@@ -76,6 +76,19 @@ page {
   align-items: center;
 }
 
+.counterpart-contact {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f0e6d8;
+}
+
+.match-tip {
+  margin-bottom: 16rpx;
+  color: #7d6752;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
 .contact-type {
   font-size: 24rpx;
   color: #9c8a78;

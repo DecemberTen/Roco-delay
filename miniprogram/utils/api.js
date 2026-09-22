@@ -1,14 +1,12 @@
 const CLOUD_FUNCTION = "quickstartFunctions";
+const LOGIN_EXPIRE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const passTypes = [
   { label: "基础版", value: "basic" },
   { label: "豪华版", value: "premium" },
 ];
 
-const pets = [
-  { label: "通行证精灵 A", value: "petA" },
-  { label: "通行证精灵 B", value: "petB" },
-];
+const pets = [];
 
 const roles = [
   { label: "我要接火", value: "buyer" },
@@ -16,8 +14,10 @@ const roles = [
 ];
 
 const statusMap = {
-  open: "待匹配",
-  contacted: "已联系",
+  matching: "匹配中",
+  matched: "已匹配",
+  open: "匹配中",
+  contacted: "已匹配",
   completed: "已完成",
   closed: "已关闭",
 };
@@ -44,7 +44,20 @@ const call = async (type, data = {}) => {
   return result.data;
 };
 
-const getLoginState = () => wx.getStorageSync("loginState") || null;
+const clearLoginState = () => {
+  wx.removeStorageSync("loginState");
+  wx.removeStorageSync("wechatProfile");
+};
+
+const getLoginState = () => {
+  const state = wx.getStorageSync("loginState") || null;
+  if (!state || !state.openid || !state.loginAt) return null;
+  if (Date.now() - state.loginAt > LOGIN_EXPIRE_MS) {
+    clearLoginState();
+    return null;
+  }
+  return state;
+};
 
 const isLoggedIn = () => Boolean(getLoginState()?.openid);
 
@@ -81,6 +94,24 @@ const loginWithWechatProfile = async () => {
   return login();
 };
 
+const replaceOptions = (target, source) => {
+  target.splice(0, target.length, ...(Array.isArray(source) ? source : []));
+};
+
+const loadPassConfig = async () => {
+  const config = await call("getPassConfig");
+  if (Array.isArray(config.passTypes) && config.passTypes.length) {
+    replaceOptions(passTypes, config.passTypes);
+  }
+  if (Array.isArray(config.pets) && config.pets.length) {
+    replaceOptions(pets, config.pets);
+  }
+  return {
+    passTypes,
+    pets,
+  };
+};
+
 const findLabel = (options, value) => {
   const item = options.find((option) => option.value === value);
   return item ? item.label : value || "";
@@ -90,6 +121,12 @@ const formatPost = (post) => ({
   ...post,
   roleLabel: findLabel(roles, post.role),
   targetRoleLabel: post.role === "buyer" ? "接火方" : "传火方",
+  flowStatusLabel:
+    post.status === "matched" || post.status === "contacted"
+      ? post.role === "buyer"
+        ? "接火中"
+        : "传火中"
+      : statusMap[post.status] || post.status,
   passTypeLabel: findLabel(passTypes, post.passType),
   petLabel: post.petName || findLabel(pets, post.petId),
   statusLabel: statusMap[post.status] || post.status,
@@ -106,8 +143,10 @@ module.exports = {
   findLabel,
   formatPost,
   getLoginState,
+  clearLoginState,
   getErrorMessage,
   isLoggedIn,
   login,
   loginWithWechatProfile,
+  loadPassConfig,
 };

@@ -2,12 +2,12 @@
   <view class="hero">
     <view class="eyebrow">Roco-delay</view>
     <view class="title">洛克王国通行证传火匹配</view>
-    <view class="subtitle">平台只做信息匹配，不参与现金交易。你未完成的传火/接火单会展示在首页顶部。</view>
+    <view class="subtitle">平台只做信息匹配，不参与现金交易。你正在匹配或已匹配的传火/接火单会展示在首页顶部。</view>
   </view>
 
   <view class="card match-card">
-    <view class="section-title">进行中的匹配单</view>
-    <view class="hint">展示你还没有完成或关闭的传火/接火信息，点击可进入详情。</view>
+    <view class="section-title">我的匹配进度</view>
+    <view class="hint">展示你还没有完成或关闭的匹配单，点击可进入详情。</view>
 
     <view wx:if="{{activePosts.length > 0}}">
       <view
@@ -19,9 +19,9 @@
       >
         <view>
           <view class="active-top">
-            <view class="badge">{{item.role === 'buyer' ? '接火中' : '传火中'}}</view>
-            <view wx:if="{{item.matchCount > 0}}" class="match-count">已有 {{item.matchCount}} 个匹配</view>
-            <view wx:else class="match-count muted">等待匹配</view>
+            <view class="badge">{{item.flowStatusLabel}}</view>
+            <view wx:if="{{item.status === 'matched' || item.status === 'contacted'}}" class="match-count">已为你锁定对方</view>
+            <view wx:else class="match-count muted">等待系统批量匹配</view>
           </view>
           <view class="active-title">{{item.passTypeLabel}} · {{item.petLabel}}</view>
           <view class="active-meta">{{item.statusLabel}} · 洛克 UID：{{item.rocoUid}}</view>
@@ -30,7 +30,7 @@
       </view>
     </view>
     <view wx:else class="empty-inline">
-      暂无进行中的传火/接火单。可以从底部“发布”Tab 创建新的匹配单。
+      暂无匹配中或进行中的传火/接火单。可以从底部“发布”Tab 创建新的匹配单。
     </view>
   </view>
 
@@ -52,7 +52,7 @@
   <view class="list-head">
     <view>
       <view class="section-title">最新发布</view>
-      <view class="hint">最近的待匹配信息，点击查看联系方式</view>
+      <view class="hint">最近发布的接火/传火信息，包含匹配中与已匹配。</view>
     </view>
   </view>
 
@@ -94,7 +94,7 @@
     >
       <view class="post-top">
         <view class="badge">{{item.roleLabel}}</view>
-        <view class="status">{{item.statusLabel}}</view>
+        <view class="status">{{item.flowStatusLabel}}</view>
       </view>
       <view class="post-title">{{item.passTypeLabel}} · {{item.petLabel}}</view>
       <view class="post-meta">洛克 UID：{{item.rocoUid}}</view>

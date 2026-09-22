@@ -4,6 +4,8 @@ Page({
   data: {
     id: "",
     post: null,
+    match: null,
+    counterpart: null,
     loading: true,
   },
 
@@ -23,8 +25,14 @@ Page({
 
     this.setData({ loading: true });
     try {
-      const post = await call("getPostDetail", { id: this.data.id });
-      this.setData({ post: formatPost(post) });
+      const detail = await call("getPostDetail", { id: this.data.id });
+      const post = detail && detail.post ? detail.post : detail;
+      const counterpart = detail && detail.counterpart ? detail.counterpart : null;
+      this.setData({
+        post: post ? formatPost(post) : null,
+        match: detail && detail.match ? detail.match : null,
+        counterpart: counterpart ? formatPost(counterpart) : null,
+      });
     } catch (error) {
       wx.showToast({
         title: error.message || "加载失败",
@@ -35,8 +43,10 @@ Page({
     }
   },
 
-  copyContact() {
-    const contact = this.data.post && this.data.post.contactValue;
+  copyContact(e) {
+    const type = e.currentTarget.dataset.type || "post";
+    const source = type === "counterpart" ? this.data.counterpart : this.data.post;
+    const contact = source && source.contactValue;
     if (!contact) return;
     wx.setClipboardData({
       data: contact,

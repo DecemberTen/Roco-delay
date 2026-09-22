@@ -5,7 +5,39 @@
     <view class="card hero">
       <view class="badge">{{post.roleLabel}}</view>
       <view class="title">{{post.passTypeLabel}} · {{post.petLabel}}</view>
-      <view class="status">{{post.statusLabel}}</view>
+      <view class="status">{{post.flowStatusLabel}}</view>
+    </view>
+
+    <view wx:if="{{post.status === 'matched' || post.status === 'contacted'}}" class="card">
+      <view class="section-title">匹配结果</view>
+      <view wx:if="{{counterpart}}">
+        <view class="match-tip">系统已为你匹配到{{post.role === 'buyer' ? '传火方' : '接火方'}}，请自行沟通确认。</view>
+        <view class="row">
+          <text class="key">对方身份</text>
+          <text class="value">{{counterpart.roleLabel}}</text>
+        </view>
+        <view class="row">
+          <text class="key">洛克 UID</text>
+          <text class="value">{{counterpart.rocoUid}}</text>
+        </view>
+        <view wx:if="{{counterpart.rocoName}}" class="row">
+          <text class="key">洛克昵称</text>
+          <text class="value">{{counterpart.rocoName}}</text>
+        </view>
+        <view class="contact counterpart-contact">
+          <view>
+            <view class="contact-type">对方{{counterpart.contactTypeLabel}}</view>
+            <view class="contact-value">{{counterpart.contactValue}}</view>
+          </view>
+          <button class="copy" data-type="counterpart" bindtap="copyContact">复制</button>
+        </view>
+      </view>
+      <view wx:else class="match-tip">匹配记录正在同步，请稍后刷新。</view>
+    </view>
+
+    <view wx:elif="{{post.status === 'matching' || post.status === 'open'}}" class="card">
+      <view class="section-title">匹配状态</view>
+      <view class="match-tip">当前正在匹配池中，系统会定时为你寻找同版本、同精灵的对方。</view>
     </view>
 
     <view class="card">
@@ -27,7 +59,7 @@
           <view class="contact-type">{{post.contactTypeLabel}}</view>
           <view class="contact-value">{{post.contactValue}}</view>
         </view>
-        <button class="copy" bindtap="copyContact">复制</button>
+        <button class="copy" data-type="post" bindtap="copyContact">复制</button>
       </view>
     </view>
 

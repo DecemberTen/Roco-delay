@@ -6,6 +6,7 @@ const {
   findLabel,
   getErrorMessage,
   isLoggedIn,
+  loadPassConfig,
   loginWithWechatProfile,
 } = require("../../utils/api");
 
@@ -23,6 +24,10 @@ Page({
     loggingIn: false,
   },
 
+  onLoad() {
+    this.loadConfig();
+  },
+
   onShow() {
     this.setData({ isLoggedIn: isLoggedIn() });
     const defaultRole = wx.getStorageSync("publishDefaultRole");
@@ -32,9 +37,25 @@ Page({
     }
   },
 
-  onTabItemTap() {
-    if (!isLoggedIn()) {
-      this.handleLogin();
+  async loadConfig() {
+    try {
+      const config = await loadPassConfig();
+      const nextPassType =
+        config.passTypes.find((item) => item.value === this.data.passType)?.value ||
+        config.passTypes[0]?.value ||
+        "";
+      const nextPetId =
+        config.pets.find((item) => item.value === this.data.petId)?.value ||
+        config.pets[0]?.value ||
+        "";
+      this.setData({
+        passTypes: config.passTypes,
+        pets: config.pets,
+        passType: nextPassType,
+        petId: nextPetId,
+      });
+    } catch (error) {
+      console.error("load pass config failed", error);
     }
   },
 
@@ -90,6 +111,13 @@ Page({
       return;
     }
     if (this.data.submitting) return;
+    if (!this.data.passType || !this.data.petId) {
+      wx.showToast({
+        title: "请选择版本和精灵",
+        icon: "none",
+      });
+      return;
+    }
     this.setData({ submitting: true });
 
     try {
@@ -116,6 +144,22 @@ Page({
           title: "需要先绑定资料",
           content: "发布前请先绑定洛克王国 UID 和联系方式。",
           confirmText: "去绑定",
+          success: (res) => {
+            if (res.confirm) {
+              wx.switchTab({
+                url: "/pages/me/index",
+              });
+            }
+          },
+        });
+        return;
+      }
+
+      if (error.code === "ACTIVE_POST_EXISTS") {
+        wx.showModal({
+          title: "已有进行中的发布",
+          content: error.message || "你已有进行中的发布，请先完成或关闭后再发布。",
+          confirmText: "去管理",
           success: (res) => {
             if (res.confirm) {
               wx.switchTab({

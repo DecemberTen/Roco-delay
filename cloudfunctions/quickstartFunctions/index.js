@@ -6,12 +6,14 @@ cloud.init({
 
 const db = cloud.database();
 const _ = db.command;
+const passConfig = require("./passConfig");
 
-const COLLECTIONS = ["users", "posts"];
-const PASS_TYPES = ["basic", "premium"];
-const PET_IDS = ["petA", "petB"];
+const COLLECTIONS = ["users", "posts", "matches"];
+const PASS_TYPES = passConfig.passTypes.map((item) => item.value);
+const PET_IDS = passConfig.pets.map((item) => item.value);
 const ROLES = ["buyer", "seller"];
-const POST_STATUS = ["open", "contacted", "completed", "closed"];
+const POST_STATUS = ["matching", "matched", "open", "contacted", "completed", "closed"];
+const POOL_STATUS = ["matching"];
 
 const ok = (data = {}) => ({
   success: true,
@@ -54,6 +56,12 @@ const getOpenId = async () => {
     unionid: wxContext.UNIONID,
   });
 };
+
+const getPassConfig = async () =>
+  ok({
+    passTypes: passConfig.passTypes,
+    pets: passConfig.pets,
+  });
 
 const login = async () => {
   const wxContext = getWxContext();
@@ -180,6 +188,18 @@ const createPost = async (event) => {
   if (!PASS_TYPES.includes(passType)) return fail("请选择通行证版本");
   if (!PET_IDS.includes(petId)) return fail("请选择通行证精灵");
 
+  const activeResp = await db
+    .collection("posts")
+    .where({
+      _openid: OPENID,
+      status: _.in(["matching", "matched"]),
+    })
+    .limit(1)
+    .get();
+  if ((activeResp.data || []).length > 0) {
+    return fail("你已有进行中的发布，请先完成或关闭后再发布", "ACTIVE_POST_EXISTS");
+  }
+
   const addResp = await db.collection("posts").add({
     data: {
       _openid: OPENID,
@@ -188,7 +208,8 @@ const createPost = async (event) => {
       petId,
       petName,
       remark,
-      status: "open",
+      status: "matching",
+      matchId: "",
       rocoUid: user.rocoUid,
       rocoName: user.rocoName || "",
       contactType: user.contactType,
@@ -208,10 +229,13 @@ const buildPostQuery = (filters = {}) => {
   if (filters.role && ROLES.includes(filters.role)) query.role = filters.role;
   if (filters.passType && PASS_TYPES.includes(filters.passType)) query.passType = filters.passType;
   if (filters.petId && PET_IDS.includes(filters.petId)) query.petId = filters.petId;
-  if (filters.status && POST_STATUS.includes(filters.status)) {
+  if (Array.isArray(filters.statuses)) {
+    const statuses = filters.statuses.filter((status) => POST_STATUS.includes(status));
+    if (statuses.length) query.status = _.in(statuses);
+  } else if (filters.status && POST_STATUS.includes(filters.status)) {
     query.status = filters.status;
   } else {
-    query.status = "open";
+    query.status = _.in(POOL_STATUS);
   }
   return query;
 };
@@ -223,7 +247,7 @@ const listMatches = async (event) => {
     role,
     passType: data.passType,
     petId: data.petId,
-    status: "open",
+    statuses: POOL_STATUS,
   });
 
   const resp = await db
@@ -248,17 +272,18 @@ const listPosts = async (event) => {
 };
 
 const getHomeSummary = async () => {
+  await ensureCollections();
   const [openResp, completedResp] = await Promise.all([
     db
       .collection("posts")
       .where({
-        status: "open",
+        status: _.in(POOL_STATUS),
       })
       .orderBy("createdAt", "desc")
       .limit(100)
       .get(),
     db
-      .collection("posts")
+      .collection("matches")
       .where({
         status: "completed",
       })
@@ -290,7 +315,7 @@ const listLatestPosts = async (event) => {
   const query = buildPostQuery({
     passType: data.passType,
     petId: data.petId,
-    status: "open",
+    statuses: ["matching", "matched"],
   });
   const resp = await db
     .collection("posts")
@@ -304,42 +329,16 @@ const listLatestPosts = async (event) => {
 
 const listMyMatchedPosts = async () => {
   const { OPENID } = getWxContext();
-  const myResp = await db
+  const resp = await db
     .collection("posts")
     .where({
       _openid: OPENID,
-      status: "open",
+      status: "matched",
     })
     .orderBy("createdAt", "desc")
     .limit(20)
     .get();
-  const myPosts = myResp.data || [];
-
-  const groups = await Promise.all(
-    myPosts.map(async (post) => {
-      const oppositeRole = post.role === "buyer" ? "seller" : "buyer";
-      const matchResp = await db
-        .collection("posts")
-        .where({
-          role: oppositeRole,
-          status: "open",
-          passType: post.passType,
-          petId: post.petId,
-          _openid: _.neq(OPENID),
-        })
-        .orderBy("createdAt", "desc")
-        .limit(5)
-        .get();
-
-      return {
-        post,
-        matchCount: matchResp.data.length,
-        matches: matchResp.data,
-      };
-    })
-  );
-
-  return ok(groups.filter((group) => group.matchCount > 0));
+  return ok(resp.data || []);
 };
 
 const listMyActivePosts = async () => {
@@ -348,12 +347,131 @@ const listMyActivePosts = async () => {
     .collection("posts")
     .where({
       _openid: OPENID,
-      status: _.in(["open", "contacted"]),
+      status: _.in(["matching", "matched"]),
     })
     .orderBy("createdAt", "desc")
     .limit(50)
     .get();
   return ok(resp.data || []);
+};
+
+const getPostByTransaction = async (transaction, id) => {
+  const resp = await transaction.collection("posts").doc(id).get();
+  return resp.data;
+};
+
+const tryCreateMatch = async (buyerPostId, sellerPostId) => {
+  try {
+    const result = await db.runTransaction(async (transaction) => {
+      const [buyerPost, sellerPost] = await Promise.all([
+        getPostByTransaction(transaction, buyerPostId),
+        getPostByTransaction(transaction, sellerPostId),
+      ]);
+
+      if (!buyerPost || !sellerPost) return null;
+      if (buyerPost.role !== "buyer" || sellerPost.role !== "seller") return null;
+      if (!POOL_STATUS.includes(buyerPost.status) || !POOL_STATUS.includes(sellerPost.status)) return null;
+      if (buyerPost.matchId || sellerPost.matchId) return null;
+      if (buyerPost._openid === sellerPost._openid) return null;
+      if (buyerPost.passType !== sellerPost.passType || buyerPost.petId !== sellerPost.petId) return null;
+
+      const matchResp = await transaction.collection("matches").add({
+        data: {
+          buyerPostId,
+          sellerPostId,
+          buyerOpenid: buyerPost._openid,
+          sellerOpenid: sellerPost._openid,
+          passType: buyerPost.passType,
+          petId: buyerPost.petId,
+          petName: buyerPost.petName || sellerPost.petName || "",
+          status: "matched",
+          createdAt: now(),
+          updatedAt: now(),
+        },
+      });
+      const matchId = matchResp._id;
+      await Promise.all([
+        transaction.collection("posts").doc(buyerPostId).update({
+          data: {
+            status: "matched",
+            matchId,
+            matchedAt: now(),
+            updatedAt: now(),
+          },
+        }),
+        transaction.collection("posts").doc(sellerPostId).update({
+          data: {
+            status: "matched",
+            matchId,
+            matchedAt: now(),
+            updatedAt: now(),
+          },
+        }),
+      ]);
+
+      return {
+        matchId,
+        buyerPostId,
+        sellerPostId,
+      };
+    });
+    return result;
+  } catch (error) {
+    console.error("try create match failed", error);
+    return null;
+  }
+};
+
+const autoMatchBatch = async () => {
+  console.log("[autoMatchBatch] 开始执行批量撮合");
+  await ensureCollections();
+  const [buyersResp, sellersResp] = await Promise.all([
+    db
+      .collection("posts")
+      .where({
+        role: "buyer",
+        status: _.in(POOL_STATUS),
+        matchId: _.in(["", null]),
+      })
+      .orderBy("createdAt", "asc")
+      .limit(100)
+      .get(),
+    db
+      .collection("posts")
+      .where({
+        role: "seller",
+        status: _.in(POOL_STATUS),
+        matchId: _.in(["", null]),
+      })
+      .orderBy("createdAt", "asc")
+      .limit(100)
+      .get(),
+  ]);
+  const sellersByKey = (sellersResp.data || []).reduce((acc, seller) => {
+    const key = `${seller.passType}:${seller.petId}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(seller);
+    return acc;
+  }, {});
+  const usedSellerIds = {};
+  const created = [];
+
+  for (const buyer of buyersResp.data || []) {
+    const key = `${buyer.passType}:${buyer.petId}`;
+    const seller = (sellersByKey[key] || []).find(
+      (item) => !usedSellerIds[item._id] && item._openid !== buyer._openid
+    );
+    if (!seller) continue;
+    usedSellerIds[seller._id] = true;
+
+    const match = await tryCreateMatch(buyer._id, seller._id);
+    if (match) created.push(match);
+  }
+
+  return ok({
+    matchedCount: created.length,
+    matches: created,
+  });
 };
 
 const listMyPosts = async () => {
@@ -374,7 +492,32 @@ const getPostDetail = async (event) => {
   if (!id) return fail("缺少发布 ID");
 
   const resp = await db.collection("posts").doc(id).get();
-  return ok(resp.data);
+  const post = resp.data;
+  if (!post) return ok(null);
+
+  let match = null;
+  let counterpart = null;
+  if (post.matchId) {
+    try {
+      const matchResp = await db.collection("matches").doc(post.matchId).get();
+      match = matchResp.data || null;
+      if (match) {
+        const counterpartPostId = post.role === "buyer" ? match.sellerPostId : match.buyerPostId;
+        if (counterpartPostId) {
+          const counterpartResp = await db.collection("posts").doc(counterpartPostId).get();
+          counterpart = counterpartResp.data || null;
+        }
+      }
+    } catch (error) {
+      console.error("load match detail failed", error);
+    }
+  }
+
+  return ok({
+    post,
+    match,
+    counterpart,
+  });
 };
 
 const updatePostStatus = async (event) => {
@@ -384,7 +527,7 @@ const updatePostStatus = async (event) => {
   const status = String(data.status || "").trim();
 
   if (!id) return fail("缺少发布 ID");
-  if (!POST_STATUS.includes(status)) return fail("状态不正确");
+  if (!["matching", "completed", "closed"].includes(status)) return fail("状态不正确");
 
   const postResp = await db.collection("posts").doc(id).get();
   const post = postResp.data;
@@ -392,12 +535,74 @@ const updatePostStatus = async (event) => {
     return fail("只能修改自己的发布", "FORBIDDEN");
   }
 
-  await db.collection("posts").doc(id).update({
-    data: {
+  const validTransitions = {
+    matching: ["closed"],
+    matched: ["completed", "closed"],
+    completed: [],
+    closed: [],
+  };
+  if (!validTransitions[post.status]?.includes(status)) {
+    return fail("当前状态不允许该操作", "INVALID_STATUS_TRANSITION");
+  }
+
+  const currentTime = now();
+
+  if (post.status === "matched" && ["completed", "closed"].includes(status)) {
+    const matchStatus = status === "completed" ? "completed" : "canceled";
+    await db.runTransaction(async (transaction) => {
+      const matchResp = await transaction.collection("matches").doc(post.matchId).get();
+      const match = matchResp.data;
+      if (!match) {
+        throw new Error("MATCH_NOT_FOUND");
+      }
+      const counterpartPostId = post.role === "buyer" ? match.sellerPostId : match.buyerPostId;
+
+      const selfUpdate = {
+        status,
+        updatedAt: currentTime,
+      };
+      if (status === "completed") selfUpdate.completedAt = currentTime;
+      if (status === "closed") selfUpdate.closedAt = currentTime;
+      await transaction.collection("posts").doc(id).update({ data: selfUpdate });
+
+      if (counterpartPostId) {
+        const counterpartUpdate =
+          status === "completed"
+            ? { status: "completed", completedAt: currentTime, updatedAt: currentTime }
+            : {
+                status: "matching",
+                matchId: "",
+                matchedAt: _.remove(),
+                updatedAt: currentTime,
+              };
+        await transaction.collection("posts").doc(counterpartPostId).update({ data: counterpartUpdate });
+      }
+
+      const matchUpdate = {
+        status: matchStatus,
+        updatedAt: currentTime,
+      };
+      if (status === "completed") matchUpdate.completedAt = currentTime;
+      if (status === "closed") {
+        matchUpdate.canceledAt = currentTime;
+        matchUpdate.canceledBy = OPENID;
+      }
+      await transaction.collection("matches").doc(post.matchId).update({ data: matchUpdate });
+    });
+  } else {
+    const updateData = {
       status,
-      updatedAt: now(),
-    },
-  });
+      updatedAt: currentTime,
+    };
+    if (status === "closed") updateData.closedAt = currentTime;
+    if (status === "matching") {
+      updateData.matchId = "";
+      updateData.matchedAt = _.remove();
+    }
+    await db.collection("posts").doc(id).update({
+      data: updateData,
+    });
+  }
   return ok({
     id,
     status,
@@ -413,9 +618,15 @@ const createCollection = async () => {
 
 exports.main = async (event) => {
   try {
+    if (!event.type && (event.Type === "Timer" || event.triggerName || event.TriggerName)) {
+      return await autoMatchBatch();
+    }
+
     switch (event.type) {
       case "getOpenId":
         return await getOpenId();
+      case "getPassConfig":
+        return await getPassConfig();
       case "login":
         return await login();
       case "getProfile":
@@ -436,6 +647,8 @@ exports.main = async (event) => {
         return await listMyMatchedPosts();
       case "listMyActivePosts":
         return await listMyActivePosts();
+      case "autoMatchBatch":
+        return await autoMatchBatch();
       case "listMyPosts":
         return await listMyPosts();
       case "getPostDetail":

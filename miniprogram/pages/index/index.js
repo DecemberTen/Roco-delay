@@ -1,16 +1,16 @@
-const { call, formatPost, passTypes, pets, isLoggedIn } = require("../../utils/api");
+const { call, formatPost, passTypes, pets, isLoggedIn, loadPassConfig } = require("../../utils/api");
 
-const allPassTypes = [{ label: "全部版本", value: "" }, ...passTypes];
-const allPets = [{ label: "全部精灵", value: "" }, ...pets];
+const getAllPassTypes = () => [{ label: "全部版本", value: "" }, ...passTypes];
+const getAllPets = () => [{ label: "全部精灵", value: "" }, ...pets];
 
 Page({
   data: {
-    passTypes: allPassTypes,
-    pets: allPets,
+    passTypes: getAllPassTypes(),
+    pets: getAllPets(),
     latestPassTypeIndex: 0,
     latestPetIndex: 0,
-    latestPassTypeLabel: allPassTypes[0].label,
-    latestPetLabel: allPets[0].label,
+    latestPassTypeLabel: "全部版本",
+    latestPetLabel: "全部精灵",
     summary: {
       buyers: 0,
       sellers: 0,
@@ -35,43 +35,44 @@ Page({
   },
 
   async bootstrap() {
+    try {
+      await loadPassConfig();
+      const nextPassTypes = getAllPassTypes();
+      const nextPets = getAllPets();
+      this.setData({
+        passTypes: nextPassTypes,
+        pets: nextPets,
+        latestPassTypeIndex: 0,
+        latestPetIndex: 0,
+        latestPassTypeLabel: nextPassTypes[0].label,
+        latestPetLabel: nextPets[0].label,
+      });
+    } catch (error) {
+      console.error("load pass config failed", error);
+    }
     this.loadHome();
   },
 
   async loadHome() {
     this.setData({ loading: true });
     try {
-      const selectedPassType = this.data.passTypes[this.data.latestPassTypeIndex].value;
-      const selectedPet = this.data.pets[this.data.latestPetIndex].value;
+      const selectedPassType = (this.data.passTypes[this.data.latestPassTypeIndex] || this.data.passTypes[0]).value;
+      const selectedPet = (this.data.pets[this.data.latestPetIndex] || this.data.pets[0]).value;
       const shouldLoadMine = isLoggedIn();
-      const [home, latestPosts, activePosts, matchedGroups] = await Promise.all([
+      const [home, latestPosts, activePosts] = await Promise.all([
         call("getHomeSummary"),
         call("listLatestPosts", {
           passType: selectedPassType,
           petId: selectedPet,
         }),
         shouldLoadMine ? call("listMyActivePosts").catch(() => []) : Promise.resolve([]),
-        shouldLoadMine ? call("listMyMatchedPosts").catch(() => []) : Promise.resolve([]),
       ]);
-      const matchCountMap = (matchedGroups || []).reduce((acc, group) => {
-        if (group.post && group.post._id) {
-          acc[group.post._id] = group.matchCount || 0;
-        }
-        return acc;
-      }, {});
 
       this.setData({
         summary: home.summary,
         latestPosts: (latestPosts || []).map(formatPost),
-        activePosts: (activePosts || []).map((post) => ({
-          ...formatPost(post),
-          matchCount: matchCountMap[post._id] || 0,
-        })),
-        matchedGroups: (matchedGroups || []).map((group) => ({
-          ...group,
-          post: formatPost(group.post),
-          matches: (group.matches || []).map(formatPost),
-        })),
+        activePosts: (activePosts || []).map(formatPost),
+        matchedGroups: [],
         hasLoaded: true,
       });
     } catch (error) {
